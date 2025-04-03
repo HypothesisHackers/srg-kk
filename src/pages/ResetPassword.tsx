@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/use-toast";
-import { supabase } from "@/lib/supabase";
+import { supabase, hasRealSupabaseCredentials } from "@/lib/supabase";
 import { ChefHat } from "lucide-react";
 
 const ResetPassword = () => {
@@ -38,6 +38,18 @@ const ResetPassword = () => {
     }
     
     setIsLoading(true);
+    
+    // Check if we're in demo mode
+    if (!hasRealSupabaseCredentials()) {
+      toast({
+        title: "Demo mode",
+        description: "Password reset is disabled in demo mode. Set your Supabase credentials to enable this feature.",
+        variant: "default",
+      });
+      setIsLoading(false);
+      navigate("/login");
+      return;
+    }
     
     try {
       const { error } = await supabase.auth.updateUser({ password });

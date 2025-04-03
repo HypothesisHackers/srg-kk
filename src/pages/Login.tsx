@@ -5,9 +5,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useToast } from "@/components/ui/use-toast";
-import { supabase } from "@/lib/supabase";
-import { ChefHat } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { supabase, hasRealSupabaseCredentials } from "@/lib/supabase";
+import { ChefHat, AlertCircle } from "lucide-react";
 
 const Login = () => {
   const [email, setEmail] = useState("");
@@ -18,6 +18,7 @@ const Login = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const demoMode = !hasRealSupabaseCredentials();
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,6 +26,17 @@ const Login = () => {
     
     try {
       if (isRegistering) {
+        if (demoMode) {
+          toast({
+            title: "Demo mode",
+            description: "Registration is simulated in demo mode. Set your Supabase credentials for real registration.",
+            variant: "default",
+          });
+          setIsRegistering(false);
+          setIsLoading(false);
+          return;
+        }
+        
         // Handle registration
         const { error } = await supabase.auth.signUp({
           email,
@@ -74,6 +86,15 @@ const Login = () => {
   };
 
   const handleSocialAuth = async (provider: 'google' | 'facebook') => {
+    if (demoMode) {
+      toast({
+        title: "Demo mode",
+        description: `Social login with ${provider} is disabled in demo mode.`,
+        variant: "default",
+      });
+      return;
+    }
+    
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
@@ -104,6 +125,15 @@ const Login = () => {
         title: "Email required",
         description: "Please enter your email address to reset your password.",
         variant: "destructive",
+      });
+      return;
+    }
+
+    if (demoMode) {
+      toast({
+        title: "Demo mode",
+        description: "Password reset is disabled in demo mode.",
+        variant: "default",
       });
       return;
     }
@@ -144,6 +174,16 @@ const Login = () => {
       </div>
       
       <div className="w-full max-w-md p-8 space-y-8 glass-card rounded-2xl relative z-10">
+        {demoMode && (
+          <div className="bg-amber-100 border border-amber-300 p-3 rounded-lg flex items-start gap-2 mb-4">
+            <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
+            <div className="text-sm text-amber-800">
+              <p className="font-medium">Demo Mode Active</p>
+              <p>You're using demo Supabase credentials. To enable full functionality, please set up your Supabase project and update the environment variables.</p>
+            </div>
+          </div>
+        )}
+        
         <div className="text-center space-y-2">
           <div className="mx-auto w-16 h-16 flex items-center justify-center rounded-full bg-gradient-to-br from-primary/30 to-primary/10 border border-primary/20">
             <ChefHat className="h-8 w-8 text-primary animate-pulse-soft" />

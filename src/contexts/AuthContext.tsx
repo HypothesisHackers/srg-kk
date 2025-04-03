@@ -1,6 +1,6 @@
 
 import React, { createContext, useState, useContext, useEffect } from "react";
-import { supabase } from "@/lib/supabase";
+import { supabase, hasRealSupabaseCredentials } from "@/lib/supabase";
 import { Session, User } from "@supabase/supabase-js";
 import { useToast } from "@/hooks/use-toast";
 
@@ -28,31 +28,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Initialize auth state from Supabase session
   useEffect(() => {
     const initializeAuth = async () => {
-      // Check for active session
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (session) {
-        handleSessionUser(session);
-      }
-      
-      setIsLoading(false);
-      
-      // Listen for auth state changes
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(
-        (_event, session) => {
-          if (session) {
-            handleSessionUser(session);
-          } else {
-            setUser(null);
-            setIsAuthenticated(false);
-          }
+      try {
+        // Check if we have real Supabase credentials
+        if (!hasRealSupabaseCredentials()) {
+          console.warn("Using mock Supabase credentials. Authentication features will be limited.");
+          setIsLoading(false);
+          return;
         }
-      );
-      
-      // Cleanup subscription
-      return () => {
-        subscription.unsubscribe();
-      };
+        
+        // Check for active session
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (session) {
+          handleSessionUser(session);
+        }
+        
+        // Listen for auth state changes
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(
+          (_event, session) => {
+            if (session) {
+              handleSessionUser(session);
+            } else {
+              setUser(null);
+              setIsAuthenticated(false);
+            }
+          }
+        );
+        
+        // Cleanup subscription
+        return () => {
+          subscription.unsubscribe();
+        };
+      } catch (error) {
+        console.error("Error initializing auth:", error);
+      } finally {
+        setIsLoading(false);
+      }
     };
     
     initializeAuth();
@@ -74,6 +85,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Sign in with email and password
   const login = async (email: string, password: string): Promise<boolean> => {
+    if (!hasRealSupabaseCredentials()) {
+      toast({
+        title: "Demo mode",
+        description: "Authentication is in demo mode. Set your Supabase credentials to enable full authentication.",
+        variant: "default",
+      });
+      
+      // Create a mock user in demo mode
+      const mockUser: AuthUser = {
+        id: "demo-user-id",
+        email: email,
+        name: email.split('@')[0] || 'Demo User',
+      };
+      setUser(mockUser);
+      setIsAuthenticated(true);
+      return true;
+    }
+    
     try {
       const { error } = await supabase.auth.signInWithPassword({
         email,
@@ -104,6 +133,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Sign out
   const logout = async () => {
+    if (!hasRealSupabaseCredentials()) {
+      // Handle logout in demo mode
+      setUser(null);
+      setIsAuthenticated(false);
+      toast({
+        title: "Logged out",
+        description: "You have been logged out from demo mode.",
+      });
+      return;
+    }
+    
     try {
       const { error } = await supabase.auth.signOut();
       if (error) {
