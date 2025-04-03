@@ -1,5 +1,4 @@
-
-import { Recipe, UserPreferences } from '../types';
+import { Recipe, UserPreferences, NutritionInfo } from '../types';
 
 const API_KEY = "sk-393cde3907614ca788a8469ef43f9f5a";
 
