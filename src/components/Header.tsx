@@ -1,7 +1,12 @@
 
 import { ThemeToggle } from "./ThemeToggle";
+import { useAuth } from "@/contexts/AuthContext";
+import { Button } from "./ui/button";
+import { LogOut, User } from "lucide-react";
 
 export function Header() {
+  const { user, logout } = useAuth();
+
   return (
     <header className="w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 items-center justify-between">
@@ -33,6 +38,23 @@ export function Header() {
           </h1>
         </div>
         <div className="flex items-center gap-4">
+          {user && (
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <User size={16} />
+                <span>{user.name}</span>
+              </div>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={logout}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <LogOut size={16} className="mr-2" />
+                Logout
+              </Button>
+            </div>
+          )}
           <ThemeToggle />
         </div>
       </div>
