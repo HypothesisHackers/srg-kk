@@ -1,23 +1,135 @@
 import { Recipe, UserPreferences, NutritionInfo } from '../types';
+import { supabase } from '@/lib/supabase';
 
-const API_KEY = "sk-393cde3907614ca788a8469ef43f9f5a";
-
-// This is a mock API call that mimics what an actual API would return
-// In a real application, this would make a call to a backend service
+// Function to generate a recipe using AI
 export const generateRecipe = async (
   ingredients: string[],
   preferences: UserPreferences
 ): Promise<Recipe> => {
-  console.log("Generating recipe with:", { ingredients, preferences });
-  console.log("Using API Key:", API_KEY);
-  
-  // Simulate API call delay
-  await new Promise((resolve) => setTimeout(resolve, 1500));
-  
-  // For demo purposes, we're generating a mock recipe based on inputs
-  // In a real app, this would call an AI service API
-  
-  const recipe: Recipe = {
+  try {
+    console.log("Generating recipe with:", { ingredients, preferences });
+    
+    // First, check if we have a similar recipe in the database
+    const { data: existingRecipes, error: fetchError } = await supabase
+      .from('recipes')
+      .select('*')
+      .contains('ingredients', ingredients)
+      .eq('dietary_preference', preferences.dietaryPreference)
+      .limit(1);
+    
+    if (fetchError) {
+      console.error("Error fetching recipes:", fetchError);
+      throw new Error("Failed to check for existing recipes");
+    }
+    
+    // If we found a matching recipe, return it
+    if (existingRecipes && existingRecipes.length > 0) {
+      console.log("Found existing recipe:", existingRecipes[0]);
+      return transformDatabaseRecipe(existingRecipes[0]);
+    }
+    
+    // Otherwise, generate a new recipe
+    console.log("No existing recipe found, generating new one...");
+    
+    // For demo purposes, we're still generating a mock recipe
+    // In a production app, this would call an external AI API
+    const mockRecipe = createMockRecipe(ingredients, preferences);
+    
+    // Save the new recipe to the database
+    const { error: insertError } = await supabase
+      .from('recipes')
+      .insert({
+        title: mockRecipe.title,
+        description: mockRecipe.description,
+        ingredients: mockRecipe.ingredients,
+        steps: mockRecipe.steps,
+        prep_time: mockRecipe.prepTime,
+        cook_time: mockRecipe.cookTime,
+        servings: mockRecipe.servings,
+        nutrition: mockRecipe.nutrition,
+        image: mockRecipe.image,
+        dietary_preference: preferences.dietaryPreference,
+        skill_level: preferences.skillLevel,
+      });
+    
+    if (insertError) {
+      console.error("Error saving recipe:", insertError);
+      // Continue anyway, just return the generated recipe
+    }
+    
+    return mockRecipe;
+  } catch (error) {
+    console.error("Error in generateRecipe:", error);
+    throw error;
+  }
+};
+
+// Save user's favorite recipe
+export const saveRecipe = async (recipe: Recipe, userId: string): Promise<void> => {
+  try {
+    const { error } = await supabase
+      .from('saved_recipes')
+      .insert({
+        user_id: userId,
+        recipe_id: recipe.id,
+      });
+    
+    if (error) {
+      console.error("Error saving favorite recipe:", error);
+      throw new Error("Failed to save recipe");
+    }
+  } catch (error) {
+    console.error("Error in saveRecipe:", error);
+    throw error;
+  }
+};
+
+// Get user's saved recipes
+export const getSavedRecipes = async (userId: string): Promise<Recipe[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('saved_recipes')
+      .select(`
+        recipe_id,
+        recipes:recipe_id (*)
+      `)
+      .eq('user_id', userId);
+    
+    if (error) {
+      console.error("Error fetching saved recipes:", error);
+      throw new Error("Failed to fetch saved recipes");
+    }
+    
+    if (!data || data.length === 0) {
+      return [];
+    }
+    
+    return data.map(item => transformDatabaseRecipe(item.recipes));
+  } catch (error) {
+    console.error("Error in getSavedRecipes:", error);
+    throw error;
+  }
+};
+
+// Helper function to transform database recipe format to app format
+function transformDatabaseRecipe(dbRecipe: any): Recipe {
+  return {
+    id: dbRecipe.id,
+    title: dbRecipe.title,
+    description: dbRecipe.description,
+    ingredients: dbRecipe.ingredients,
+    steps: dbRecipe.steps,
+    prepTime: dbRecipe.prep_time,
+    cookTime: dbRecipe.cook_time,
+    servings: dbRecipe.servings,
+    nutrition: dbRecipe.nutrition,
+    image: dbRecipe.image,
+  };
+}
+
+// Helper functions for mock recipe generation (same as before)
+function createMockRecipe(ingredients: string[], preferences: UserPreferences): Recipe {
+  return {
     id: Math.random().toString(36).substring(2, 9),
     title: createRecipeTitle(ingredients, preferences),
     description: createRecipeDescription(ingredients, preferences),
@@ -29,11 +141,7 @@ export const generateRecipe = async (
     nutrition: calculateNutrition(ingredients, preferences),
     image: getRandomFoodImage(),
   };
-  
-  return recipe;
-};
-
-// Helper functions to generate mock recipe data
+}
 
 function createRecipeTitle(ingredients: string[], preferences: UserPreferences): string {
   const mainIngredient = ingredients[0] || "Mixed";

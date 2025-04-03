@@ -1,61 +1,139 @@
 
 import React, { createContext, useState, useContext, useEffect } from "react";
+import { supabase } from "@/lib/supabase";
+import { Session, User } from "@supabase/supabase-js";
+import { useToast } from "@/hooks/use-toast";
 
-type User = {
+type AuthUser = {
   id: string;
   email: string;
   name: string;
 };
 
 interface AuthContextType {
-  user: User | null;
+  user: AuthUser | null;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<boolean>;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
 
-  // Check for existing session on load
+  // Initialize auth state from Supabase session
   useEffect(() => {
-    const storedUser = localStorage.getItem("user");
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-      setIsAuthenticated(true);
-    }
-  }, []);
-
-  // Mock login function (in a real app, this would connect to a backend)
-  const login = async (email: string, password: string): Promise<boolean> => {
-    // For demo purposes, accept any non-empty credentials
-    if (email && password) {
-      const mockUser = {
-        id: "user1",
-        email,
-        name: email.split("@")[0],
-      };
+    const initializeAuth = async () => {
+      // Check for active session
+      const { data: { session } } = await supabase.auth.getSession();
       
-      setUser(mockUser);
+      if (session) {
+        handleSessionUser(session);
+      }
+      
+      setIsLoading(false);
+      
+      // Listen for auth state changes
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(
+        (_event, session) => {
+          if (session) {
+            handleSessionUser(session);
+          } else {
+            setUser(null);
+            setIsAuthenticated(false);
+          }
+        }
+      );
+      
+      // Cleanup subscription
+      return () => {
+        subscription.unsubscribe();
+      };
+    };
+    
+    initializeAuth();
+  }, []);
+  
+  // Helper to format Supabase user to our app's user type
+  const handleSessionUser = (session: Session) => {
+    const supabaseUser = session.user;
+    if (supabaseUser) {
+      const formattedUser: AuthUser = {
+        id: supabaseUser.id,
+        email: supabaseUser.email || '',
+        name: supabaseUser.user_metadata?.name || supabaseUser.email?.split('@')[0] || 'User',
+      };
+      setUser(formattedUser);
       setIsAuthenticated(true);
-      localStorage.setItem("user", JSON.stringify(mockUser));
-      return true;
     }
-    return false;
   };
 
-  const logout = () => {
-    setUser(null);
-    setIsAuthenticated(false);
-    localStorage.removeItem("user");
+  // Sign in with email and password
+  const login = async (email: string, password: string): Promise<boolean> => {
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      
+      if (error) {
+        console.error('Login error:', error.message);
+        toast({
+          title: "Login failed",
+          description: error.message,
+          variant: "destructive",
+        });
+        return false;
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Unexpected login error:', error);
+      toast({
+        title: "Login error",
+        description: "An unexpected error occurred. Please try again.",
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+
+  // Sign out
+  const logout = async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error('Logout error:', error.message);
+        toast({
+          title: "Logout failed",
+          description: error.message,
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Unexpected logout error:', error);
+      toast({
+        title: "Logout error",
+        description: "An unexpected error occurred. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated, login, logout }}>
-      {children}
+    <AuthContext.Provider 
+      value={{ 
+        user, 
+        isAuthenticated, 
+        login, 
+        logout 
+      }}
+    >
+      {!isLoading && children}
     </AuthContext.Provider>
   );
 }
